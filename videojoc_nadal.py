@@ -2,44 +2,34 @@ import pygame
 import random
 import sys
 import os
+import math
+import string
 
-# --- CONFIGURACIÓN INICIAL ---
+# --- CONFIGURACIÓN GLOBAL ---
 pygame.init()
 
-# Colores
+# Colores Generales
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
+PAPER_COLOR = (250, 245, 230)
+TEXT_COLOR = (20, 20, 40)
+BUTTON_HOVER = (255, 250, 240)
+
+# Colores Temáticos
+CHRISTMAS_RED = (180, 30, 30) 
+CHRISTMAS_GREEN = (34, 139, 34)
+GOLD = (218, 165, 32)
+GROUND_COLOR_JAPAN = (40, 65, 95)
 TORI_RED_FALLBACK = (200, 50, 50)
 DARUMA_RED_FALLBACK = (220, 20, 60)
-GROUND_COLOR = (40, 65, 95) 
-PAPER_COLOR = (250, 245, 230) 
-TEXT_COLOR = (20, 20, 40)
-BUTTON_HOVER_COLOR = (255, 250, 240) # Un poco más claro al pasar el ratón
+BROWN_STICK = (101, 67, 33)
+SOUP_HIGHLIGHT = (255, 215, 0, 100)
+SOUP_FOUND = (50, 200, 50, 128)
 
-# Pantalla Completa
+# Configuración de Pantalla
 screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 WIDTH, HEIGHT = screen.get_size()
-pygame.display.set_caption("Misión Japón: Consigue el Libro")
-
-# --- ALTURA DEL SUELO RELATIVA ---
-GROUND_HEIGHT = int(HEIGHT * 0.05)
-GROUND_Y_POS = HEIGHT - GROUND_HEIGHT
-
-# --- CARGA DE FONDO (.PNG) ---
-background_filename = "fondo_fuji.png" 
-background_image = None
-use_image_bg = False
-
-if os.path.exists(background_filename):
-    try:
-        loaded_bg = pygame.image.load(background_filename).convert()
-        background_image = pygame.transform.smoothscale(loaded_bg, (WIDTH, HEIGHT))
-        use_image_bg = True
-        print("Fondo cargado correctamente.")
-    except:
-        print("Error cargando el fondo.")
-else:
-    print(f"AVISO: No se encuentra '{background_filename}'.")
+pygame.display.set_caption("JOC DE NADAL DE FAMÍLIA")
 
 clock = pygame.time.Clock()
 FPS = 60
@@ -47,326 +37,681 @@ FPS = 60
 # --- FUENTES ---
 try:
     font_ui = pygame.font.SysFont("georgia", int(HEIGHT * 0.04), bold=True)
-    font_title = pygame.font.SysFont("georgia", int(HEIGHT * 0.10), bold=True) # Título Menú
+    font_title = pygame.font.SysFont("georgia", int(HEIGHT * 0.10), bold=True)
     font_big = pygame.font.SysFont("georgia", int(HEIGHT * 0.12), bold=True)
+    font_soup = pygame.font.SysFont("courier new", int(HEIGHT * 0.04), bold=True) 
 except:
-    font_ui = pygame.font.Font(None, int(HEIGHT * 0.05)) 
+    font_ui = pygame.font.Font(None, int(HEIGHT * 0.05))
     font_title = pygame.font.Font(None, int(HEIGHT * 0.10))
-    font_big = pygame.font.Font(None, int(HEIGHT * 0.15)) 
+    font_big = pygame.font.Font(None, int(HEIGHT * 0.15))
+    font_soup = pygame.font.Font(None, int(HEIGHT * 0.05))
 
-# --- CLASES DEL JUEGO ---
-
-class Player(pygame.sprite.Sprite):
-    def __init__(self, char_name):
-        super().__init__()
-        filename = f"cara_{char_name}.png"
-        self.target_height = int(HEIGHT * 0.25) # Ninja grande
-
-        try:
-            original_image = pygame.image.load(filename).convert_alpha()
-            orig_rect = original_image.get_rect()
-            aspect_ratio = orig_rect.width / orig_rect.height
-            target_width = int(self.target_height * aspect_ratio)
-            self.image = pygame.transform.smoothscale(original_image, (target_width, self.target_height))
-        except FileNotFoundError:
-            self.image = pygame.Surface((self.target_height, self.target_height))
-            self.image.fill((0, 0, 255))
-
-        self.rect = self.image.get_rect()
-        self.rect.inflate_ip(-self.rect.width*0.1, -self.rect.height*0.1)
-        self.rect.x = WIDTH * 0.1
-        self.rect.bottom = GROUND_Y_POS
-        
-        self.velocity_y = 0
-        self.is_jumping = False
-        self.gravity = HEIGHT * 0.0018 
-        self.jump_force = -HEIGHT * 0.038
-
-    def update(self):
-        self.velocity_y += self.gravity
-        self.rect.y += self.velocity_y
-        if self.rect.bottom >= GROUND_Y_POS:
-            self.rect.bottom = GROUND_Y_POS
-            self.is_jumping = False
-
-    def jump(self):
-        if not self.is_jumping:
-            self.velocity_y = self.jump_force
-            self.is_jumping = True
-
-class Obstacle(pygame.sprite.Sprite):
-    def __init__(self, obs_type):
-        super().__init__()
-        self.type = obs_type
-        self.image = None
-        if self.type == "Tori":
-            target_height_ratio = 0.45 
-            filename = "tori.png"
-            fallback_color = TORI_RED_FALLBACK
-        else:
-            target_height_ratio = 0.19
-            filename = "daruma.png"
-            fallback_color = DARUMA_RED_FALLBACK
-        
-        target_height = int(HEIGHT * target_height_ratio)
-        
-        try:
-            loaded_img = pygame.image.load(filename).convert_alpha()
-            orig_rect = loaded_img.get_rect()
-            aspect_ratio = orig_rect.width / orig_rect.height
-            target_width = int(target_height * aspect_ratio)
-            self.image = pygame.transform.smoothscale(loaded_img, (target_width, target_height))
-        except FileNotFoundError:
-            s = target_height
-            self.image = pygame.Surface((s, s))
-            self.image.fill(fallback_color)
-            target_width = s
-        
-        self.rect = self.image.get_rect()
-        
-        offset_y = int(HEIGHT * 0.015)
-        self.rect.bottom = GROUND_Y_POS + offset_y
-        
-        self.rect.x = WIDTH + random.randint(0, int(WIDTH*0.3))
-        self.speed = WIDTH * 0.013
-        
-        self.mask = pygame.mask.from_surface(self.image)
-        if self.type == "Tori":
-            collision_surface = pygame.Surface((target_width, target_height), pygame.SRCALPHA)
-            top_bar_height = int(target_height * 0.25)
-            area_to_copy = pygame.Rect(0, 0, target_width, top_bar_height)
-            collision_surface.blit(self.image, (0, 0), area_to_copy)
-            self.mask = pygame.mask.from_surface(collision_surface)
-
-    def update(self):
-        self.rect.x -= self.speed
-        if self.rect.right < 0:
-            self.kill() 
-
-# --- FUNCIONES DE DIBUJO ---
+# --- FUNCIONES AUXILIARES ---
 
 def draw_paper_box(surface, rect, text_surf=None, image_surf=None, is_hovered=False):
-    """Dibuja una caja estilo papel con texto e imagen opcional"""
-    color = BUTTON_HOVER_COLOR if is_hovered else PAPER_COLOR
+    """Dibuja un botón estilo papel"""
+    color = BUTTON_HOVER if is_hovered else PAPER_COLOR
     pygame.draw.rect(surface, color, rect, border_radius=15)
     pygame.draw.rect(surface, TEXT_COLOR, rect, 3, border_radius=15)
     
     center_x = rect.centerx
-    current_y = rect.y + 20
     
     if image_surf:
         img_rect = image_surf.get_rect(center=(center_x, rect.centery - 20))
         surface.blit(image_surf, img_rect)
-        current_y += img_rect.height + 10
         
     if text_surf:
-        # Si hay imagen, ponemos el texto debajo, si no, centrado
         if image_surf:
-            text_rect = text_surf.get_rect(center=(center_x, rect.bottom - 40))
+            text_rect = text_surf.get_rect(center=(center_x, rect.bottom - 30))
         else:
             text_rect = text_surf.get_rect(center=rect.center)
         surface.blit(text_surf, text_rect)
 
-def load_face_for_menu(char_name):
-    """Carga la cara para mostrarla en el menú"""
+def load_face(char_name, size):
+    """Carga y escala la cara del personaje"""
     try:
         img = pygame.image.load(f"cara_{char_name}.png").convert_alpha()
-        # Escalamos para que quepa en el botón
-        h = int(HEIGHT * 0.25) # Tamaño grande para el menú
-        w = int(h * (img.get_width() / img.get_height()))
-        return pygame.transform.smoothscale(img, (w, h))
+        orig_rect = img.get_rect()
+        aspect = orig_rect.width / orig_rect.height
+        w = int(size * aspect)
+        return pygame.transform.smoothscale(img, (w, size))
     except:
-        return None
+        s = pygame.Surface((size, size))
+        s.fill((0, 0, 200))
+        return s
 
-# --- BUCLE DEL MENÚ ---
+# ==============================================================================
+# JUEGO 1: RECORDS DE JAPÓ (Runner)
+# ==============================================================================
 
-def main_menu():
-    """Muestra la pantalla de inicio y devuelve 'marti', 'marta' o None (salir)"""
+def run_japan_game(character_name):
+    GROUND_HEIGHT = int(HEIGHT * 0.05)
+    GROUND_Y = HEIGHT - GROUND_HEIGHT
+    bg_img = None
+    if os.path.exists("fondo_fuji.png"):
+        bg_img = pygame.transform.smoothscale(pygame.image.load("fondo_fuji.png").convert(), (WIDTH, HEIGHT))
+
+    class RunnerPlayer(pygame.sprite.Sprite):
+        def __init__(self):
+            super().__init__()
+            self.target_h = int(HEIGHT * 0.25)
+            self.image = load_face(character_name, self.target_h)
+            self.rect = self.image.get_rect()
+            self.rect.inflate_ip(-self.rect.width*0.1, -self.rect.height*0.1)
+            self.rect.x = WIDTH * 0.1
+            self.rect.bottom = GROUND_Y
+            self.vel_y = 0; self.jumping = False; self.gravity = HEIGHT * 0.0018; self.jump_force = -HEIGHT * 0.038
+        def update(self):
+            self.vel_y += self.gravity; self.rect.y += self.vel_y
+            if self.rect.bottom >= GROUND_Y: self.rect.bottom = GROUND_Y; self.jumping = False
+        def jump(self):
+            if not self.jumping: self.vel_y = self.jump_force; self.jumping = True
+
+    class Obstacle(pygame.sprite.Sprite):
+        def __init__(self, o_type):
+            super().__init__()
+            if o_type == "Tori": ratio = 0.45; name = "tori.png"; color = TORI_RED_FALLBACK
+            else: ratio = 0.19; name = "daruma.png"; color = DARUMA_RED_FALLBACK
+            h = int(HEIGHT * ratio)
+            try:
+                img = pygame.image.load(name).convert_alpha()
+                w = int(h * (img.get_width()/img.get_height()))
+                self.image = pygame.transform.smoothscale(img, (w, h))
+            except:
+                self.image = pygame.Surface((int(h*0.6), h)); self.image.fill(color)
+            self.rect = self.image.get_rect()
+            offset = int(HEIGHT * 0.015); self.rect.bottom = GROUND_Y + offset
+            self.rect.x = WIDTH + random.randint(0, int(WIDTH*0.3)); self.speed = WIDTH * 0.013
+            self.mask = pygame.mask.from_surface(self.image)
+            if o_type == "Tori":
+                col_surf = pygame.Surface(self.image.get_size(), pygame.SRCALPHA)
+                top_h = int(h * 0.25)
+                col_surf.blit(self.image, (0,0), (0,0, self.rect.width, top_h))
+                self.mask = pygame.mask.from_surface(col_surf)
+        def update(self):
+            self.rect.x -= self.speed
+            if self.rect.right < 0: self.kill()
+
+    all_sprites = pygame.sprite.Group(); obstacles = pygame.sprite.Group(); player = RunnerPlayer(); all_sprites.add(player)
+    score = 0; target = 3000; game_over = False; won = False
+    OBS_EVENT = pygame.USEREVENT + 1; pygame.time.set_timer(OBS_EVENT, 1400)
     
-    # Cargar imágenes para el menú
-    img_marti = load_face_for_menu("marti")
-    img_marta = load_face_for_menu("marta")
-    
-    # Textos
-    title_surf = font_title.render("JOC DE NADAL DE FAMÍLIA", True, PAPER_COLOR)
-    text_marti = font_ui.render("Jugar amb Martí", True, TEXT_COLOR)
-    text_marta = font_ui.render("Jugar amb Marta", True, TEXT_COLOR)
-    text_exit = font_ui.render("SORTIR DEL JOC", True, TEXT_COLOR)
-    
-    # Definir Rectángulos de Botones
-    button_w = int(WIDTH * 0.25)
-    button_h = int(HEIGHT * 0.4)
-    button_y = int(HEIGHT * 0.35)
-    
-    rect_marti = pygame.Rect(int(WIDTH * 0.2), button_y, button_w, button_h)
-    rect_marta = pygame.Rect(int(WIDTH * 0.55), button_y, button_w, button_h)
-    
-    rect_exit = pygame.Rect(0, 0, int(WIDTH * 0.2), int(HEIGHT * 0.08))
-    rect_exit.center = (WIDTH // 2, HEIGHT * 0.9)
-    
-    menu_running = True
-    while menu_running:
-        mouse_pos = pygame.mouse.get_pos()
-        
+    while True:
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return None
+            if event.type == pygame.QUIT: pygame.quit(); sys.exit()
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    return None
-            
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if rect_marti.collidepoint(mouse_pos):
-                    return "marti"
-                if rect_marta.collidepoint(mouse_pos):
-                    return "marta"
-                if rect_exit.collidepoint(mouse_pos):
-                    return None
-
-        # Dibujar Fondo
-        if use_image_bg:
-            screen.blit(background_image, (0, 0))
-        else:
-            screen.fill((135, 206, 235))
-            
-        # Capa oscura para que resalte el menú
-        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 100))
-        screen.blit(overlay, (0,0))
-        
-        # Dibujar Título (con sombra)
-        title_rect = title_surf.get_rect(center=(WIDTH//2, HEIGHT * 0.15))
-        # Sombra negra
-        title_shadow = font_title.render("JOC DE NADAL DE FAMÍLIA", True, BLACK)
-        screen.blit(title_shadow, (title_rect.x + 4, title_rect.y + 4))
-        screen.blit(title_surf, title_rect)
-        
-        # Dibujar Botones
-        draw_paper_box(screen, rect_marti, text_marti, img_marti, rect_marti.collidepoint(mouse_pos))
-        draw_paper_box(screen, rect_marta, text_marta, img_marta, rect_marta.collidepoint(mouse_pos))
-        draw_paper_box(screen, rect_exit, text_exit, None, rect_exit.collidepoint(mouse_pos))
-        
-        pygame.display.flip()
-        clock.tick(FPS)
-
-# --- BUCLE DEL JUEGO ---
-
-def game_loop(character_name):
-    """Ejecuta el juego con el personaje seleccionado"""
-    all_sprites = pygame.sprite.Group()
-    obstacles = pygame.sprite.Group()
-    player = Player(character_name)
-    all_sprites.add(player)
-    
-    score = 0
-    target_score = 3000
-    game_over = False
-    won = False
-    
-    obstacle_event = pygame.USEREVENT + 1
-    pygame.time.set_timer(obstacle_event, 1400)
-    
-    playing = True
-    while playing:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    # Volver al menú
-                    return 
-                
+                if event.key == pygame.K_ESCAPE: return
                 if event.key == pygame.K_SPACE:
-                    if not game_over and not won:
-                        player.jump()
-                    elif game_over or won:
-                        # Reiniciar partida (mismo personaje)
-                        game_over = False
-                        won = False
-                        score = 0
-                        all_sprites.empty()
-                        obstacles.empty()
-                        player = Player(character_name)
-                        all_sprites.add(player)
-
-            if event.type == obstacle_event and not game_over and not won:
-                obs_type = random.choice(["Tori", "Daruma"])
-                obstacle = Obstacle(obs_type)
-                obstacles.add(obstacle)
-                all_sprites.add(obstacle)
+                    if not game_over and not won: player.jump()
+                    elif game_over or won: return run_japan_game(character_name)
+            if event.type == OBS_EVENT and not game_over and not won: obstacles.add(Obstacle(random.choice(["Tori", "Daruma"])))
 
         if not game_over and not won:
-            all_sprites.update()
-            if pygame.sprite.spritecollide(player, obstacles, False, pygame.sprite.collide_mask):
-                game_over = True
-            score += 1
-            if score >= target_score:
-                won = True
-
-        # --- DIBUJADO ---
-        if use_image_bg:
-            screen.blit(background_image, (0, 0))
-        else:
-            screen.fill((135, 206, 235)) 
-            
-        pygame.draw.rect(screen, GROUND_COLOR, (0, GROUND_Y_POS, WIDTH, GROUND_HEIGHT)) 
-        all_sprites.draw(screen)
-
-        # UI
-        score_text = f"Punts: {score} / {target_score}"
-        text_surface = font_ui.render(score_text, True, TEXT_COLOR)
-        padding = 20
-        bg_rect = pygame.Rect(WIDTH * 0.03, HEIGHT * 0.03, text_surface.get_width() + padding * 2, text_surface.get_height() + padding)
-        pygame.draw.rect(screen, PAPER_COLOR, bg_rect, border_radius=10)
-        pygame.draw.rect(screen, TEXT_COLOR, bg_rect, 2, border_radius=10)
-        screen.blit(text_surface, (bg_rect.x + padding, bg_rect.y + padding//2))
-
-        # Pantallas finales
-        if game_over or won:
-            s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)   
-            s.fill((0, 0, 0, 180))
-            screen.blit(s, (0,0))
-
-        if game_over:
-            text_go = font_big.render("HAS XOCAT!", True, PAPER_COLOR)
-            text_restart = font_ui.render("Prem ESPAI per tornar-ho a provar", True, PAPER_COLOR)
-            text_menu = font_ui.render("Prem ESC per tornar al menú", True, PAPER_COLOR) # Aviso extra
-            
-            rect_go = text_go.get_rect(center=(WIDTH//2, HEIGHT//2 - 50))
-            rect_res = text_restart.get_rect(center=(WIDTH//2, HEIGHT//2 + 50))
-            rect_menu = text_menu.get_rect(center=(WIDTH//2, HEIGHT//2 + 100))
-            
-            screen.blit(text_go, rect_go)
-            screen.blit(text_restart, rect_res)
-            screen.blit(text_menu, rect_menu)
+            obstacles.update(); player.update()
+            if pygame.sprite.spritecollide(player, obstacles, False, pygame.sprite.collide_mask): game_over = True
+            score += 1; 
+            if score >= target: won = True
         
+        if bg_img: screen.blit(bg_img, (0,0))
+        else: screen.fill((135, 206, 235))
+        pygame.draw.rect(screen, GROUND_COLOR_JAPAN, (0, GROUND_Y, WIDTH, GROUND_HEIGHT))
+        obstacles.draw(screen); screen.blit(player.image, player.rect)
+        draw_paper_box(screen, pygame.Rect(20, 20, 300, 60), font_ui.render(f"Punts: {score}", True, TEXT_COLOR))
+
+        if game_over or won:
+            s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA); s.fill((0,0,0,180)); screen.blit(s, (0,0))
+            msg = "HAS XOCAT!" if game_over else "NIVELL SUPERAT!"; col = PAPER_COLOR if game_over else (255, 215, 0)
+            txt = font_big.render(msg, True, col); screen.blit(txt, txt.get_rect(center=(WIDTH//2, HEIGHT//2)))
+            sub = font_ui.render("Espai: Reiniciar  |  ESC: Menú", True, WHITE); screen.blit(sub, sub.get_rect(center=(WIDTH//2, HEIGHT//2 + 80)))
+        pygame.display.flip(); clock.tick(FPS)
+
+# ==============================================================================
+# JUEGO 2: EL CAGA TIÓ (FPS)
+# ==============================================================================
+
+def run_tio_game(character_name):
+    bg_img = None
+    if os.path.exists("fons_tio.png"): bg_img = pygame.transform.smoothscale(pygame.image.load("fons_tio.png").convert(), (WIDTH, HEIGHT))
+    
+    tio_img = None; tio_cop_img = None
+    if os.path.exists("tio.png"):
+        raw = pygame.image.load("tio.png").convert_alpha(); scale = HEIGHT * 0.35; w = int(scale * (raw.get_width() / raw.get_height()))
+        tio_img = pygame.transform.flip(pygame.transform.smoothscale(raw, (w, int(scale))), True, False)
+    else: tio_img = pygame.Surface((200,100)); tio_img.fill((139,69,19))
+    
+    if os.path.exists("tio_cop.png"):
+        raw = pygame.image.load("tio_cop.png").convert_alpha(); tio_cop_img = pygame.transform.flip(pygame.transform.smoothscale(raw, (w, int(scale))), True, False)
+    else: tio_cop_img = tio_img
+
+    stick_img = None; target_stick_len = int(HEIGHT * 0.9); target_stick_w = 60 
+    if os.path.exists("pal.png"): stick_img = pygame.transform.smoothscale(pygame.image.load("pal.png").convert_alpha(), (target_stick_w, target_stick_len))
+    else: stick_img = pygame.Surface((target_stick_w, target_stick_len), pygame.SRCALPHA); stick_img.fill(BROWN_STICK)
+        
+    player_mini_img = load_face(character_name, 80)
+    hits_needed = 8; hits_current = 0; state = "WAITING"
+    timer_next_prompt = pygame.time.get_ticks() + random.randint(2000, 4000); timer_reaction_limit = 0; REACTION_TIME = 900
+    stick_rotation = 0; is_hitting_anim = False
+    
+    while True:
+        current_time = pygame.time.get_ticks()
+        if state == "WAITING":
+            if current_time >= timer_next_prompt: state = "PROMPT"; timer_reaction_limit = current_time + REACTION_TIME
+        elif state == "PROMPT":
+            if current_time > timer_reaction_limit: state = "MISS"; timer_next_prompt = current_time + 2000
+        elif state == "HIT_ANIM":
+            if stick_rotation > 0: stick_rotation -= 5 
+            else: stick_rotation = 0; is_hitting_anim = False; state = "WAITING"; timer_next_prompt = current_time + random.randint(1500, 3500)
+            if hits_current >= hits_needed: state = "WIN"
+        elif state == "MISS":
+             if current_time >= timer_next_prompt: state = "WAITING"; timer_next_prompt = current_time + random.randint(2000, 4000)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT: pygame.quit(); sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE: return
+                if event.key == pygame.K_SPACE:
+                    if state == "PROMPT": hits_current += 1; state = "HIT_ANIM"; is_hitting_anim = True; stick_rotation = 60
+                    elif state == "WIN": return run_tio_game(character_name)
+
+        if bg_img: screen.blit(bg_img, (0,0))
+        else: screen.fill((200, 180, 160)) 
+        
+        curr_tio = tio_cop_img if is_hitting_anim else tio_img
+        tio_rect = curr_tio.get_rect(); tio_rect.bottomleft = (WIDTH * 0.05, HEIGHT * 0.90)
+        draw_x, draw_y = tio_rect.x, tio_rect.y
+        if is_hitting_anim: draw_x += random.randint(-5, 5); draw_y += random.randint(-5, 5)
+        screen.blit(curr_tio, (draw_x, draw_y))
+        
+        screen.blit(player_mini_img, (20, 20))
+        draw_paper_box(screen, pygame.Rect(20 + player_mini_img.get_width() + 10, 30, 350, 60), font_ui.render(f"Cops: {hits_current} / {hits_needed}", True, TEXT_COLOR))
+
+        if state == "PROMPT":
+            ptxt = font_title.render("COP DE BASTÓ!", True, TEXT_COLOR)
+            prect = pygame.Rect(0,0, ptxt.get_width()+60, ptxt.get_height()+30); prect.center = (WIDTH//2, HEIGHT*0.3)
+            pygame.draw.rect(screen, PAPER_COLOR, prect, border_radius=25); pygame.draw.rect(screen, CHRISTMAS_RED, prect, 8, border_radius=25); screen.blit(ptxt, ptxt.get_rect(center=prect.center))
+        if state == "MISS":
+            mtxt = font_title.render("Massa lent!", True, CHRISTMAS_RED)
+            mrect = pygame.Rect(0,0, mtxt.get_width()+60, mtxt.get_height()+30); mrect.center = (WIDTH//2, HEIGHT*0.3)
+            pygame.draw.rect(screen, PAPER_COLOR, mrect, border_radius=25); pygame.draw.rect(screen, CHRISTMAS_RED, mrect, 8, border_radius=25); screen.blit(mtxt, mtxt.get_rect(center=mrect.center))
+
+        cur_ang = 45 + stick_rotation; rot_stick = pygame.transform.rotate(stick_img, cur_ang)
+        st_rect = rot_stick.get_rect(); st_rect.bottomright = (WIDTH * 0.75, HEIGHT * 1.1)
+        screen.blit(rot_stick, st_rect)
+
+        if state == "WIN":
+             s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA); s.fill((0,0,0,180)); screen.blit(s, (0,0))
+             wtxt = font_big.render("CAAAAAGAAA TIÓ!!!", True, GOLD); gtxt = font_ui.render("Pots obrir el següent regal", True, WHITE)
+             screen.blit(wtxt, wtxt.get_rect(center=(WIDTH//2, HEIGHT//2))); screen.blit(gtxt, gtxt.get_rect(center=(WIDTH//2, HEIGHT//2 + 100)))
+
+        pygame.display.flip(); clock.tick(FPS)
+
+# ==============================================================================
+# JUEGO 3: SOPA DE LETRAS
+# ==============================================================================
+
+def run_soup_game(character_name):
+    ROWS, COLS = 12, 12; CELL_SIZE = int(HEIGHT * 0.065)
+    BOARD_W = COLS * CELL_SIZE; BOARD_H = ROWS * CELL_SIZE
+    ALL = ["CANELONS", "POLVORONS", "ESCUDELLA", "TORRO", "NEULES", "GALETS", "CAVA", "TORTELL"]
+    targets = random.sample(ALL, 5); found = []; found_cells = [] 
+    grid = [['' for _ in range(COLS)] for _ in range(ROWS)]
+    
+    def place(w):
+        w = w.upper()
+        for _ in range(100):
+            d = random.choice([(0,1), (1,0), (1,1)]); sr = random.randint(0, ROWS-1); sc = random.randint(0, COLS-1)
+            if 0<=sr+d[0]*(len(w)-1)<ROWS and 0<=sc+d[1]*(len(w)-1)<COLS:
+                can = True
+                for i in range(len(w)):
+                    if grid[sr+d[0]*i][sc+d[1]*i] not in ['', w[i]]: can = False; break
+                if can:
+                    for i in range(len(w)): grid[sr+d[0]*i][sc+d[1]*i] = w[i]
+                    return True
+        return False
+    for w in targets: place(w)
+    chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    for r in range(ROWS):
+        for c in range(COLS): 
+            if grid[r][c] == '': grid[r][c] = random.choice(chars)
+
+    bg = None
+    if os.path.exists("fons_cuina.png"): bg = pygame.transform.smoothscale(pygame.image.load("fons_cuina.png").convert(), (WIDTH, HEIGHT))
+    mini = load_face(character_name, 80)
+    
+    sel_s = None; sel_e = None; selecting = False; won = False
+    bx = (WIDTH - BOARD_W) // 2; by = (HEIGHT - BOARD_H) // 2
+    
+    while True:
+        mx, my = pygame.mouse.get_pos()
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT: pygame.quit(); sys.exit()
+            if e.type == pygame.KEYDOWN:
+                if e.key == pygame.K_ESCAPE: return
+                if e.key == pygame.K_SPACE and won: return run_soup_game(character_name)
+            if not won:
+                if e.type == pygame.MOUSEBUTTONDOWN and bx<=mx<bx+BOARD_W and by<=my<by+BOARD_H:
+                    c=(mx-bx)//CELL_SIZE; r=(my-by)//CELL_SIZE; sel_s=(r,c); sel_e=(r,c); selecting=True
+                elif e.type == pygame.MOUSEMOTION and selecting:
+                    if bx<=mx<bx+BOARD_W and by<=my<by+BOARD_H: c=(mx-bx)//CELL_SIZE; r=(my-by)//CELL_SIZE; sel_e=(r,c)
+                elif e.type == pygame.MOUSEBUTTONUP and selecting:
+                    selecting=False; r1,c1=sel_s; r2,c2=sel_e; dr,dc=r2-r1,c2-c1; steps=max(abs(dr),abs(dc)); steps=1 if steps==0 else steps
+                    dr=0 if dr==0 else dr//abs(dr); dc=0 if dc==0 else dc//abs(dc)
+                    if (dr==0 or dc==0 or abs(dr)==abs(dc)):
+                        word=""; coords=[]
+                        for i in range(steps+1): cr,cc=r1+dr*i,c1+dc*i; word+=grid[cr][cc]; coords.append((cr,cc))
+                        f=False
+                        if word in targets and word not in found: found.append(word); f=True
+                        elif word[::-1] in targets and word[::-1] not in found: found.append(word[::-1]); f=True
+                        if f: found_cells.extend(coords)
+                    sel_s=None; sel_e=None
+                    if len(found)==len(targets): won=True
+
+        if bg: screen.blit(bg, (0,0))
+        else: screen.fill((200,200,200))
+        
+        s_bg = pygame.Surface((BOARD_W+40, BOARD_H+40), pygame.SRCALPHA); s_bg.fill((255,255,255,200))
+        screen.blit(s_bg, (bx-20, by-20)); pygame.draw.rect(screen, BLACK, (bx-20, by-20, BOARD_W+40, BOARD_H+40), 4)
+        
+        for r in range(ROWS):
+            for c in range(COLS):
+                rect = pygame.Rect(bx+c*CELL_SIZE, by+r*CELL_SIZE, CELL_SIZE, CELL_SIZE)
+                if (r,c) in found_cells: pygame.draw.rect(screen, (144,238,144), rect)
+                pygame.draw.rect(screen, BLACK, rect, 1)
+                l = font_soup.render(grid[r][c], True, BLACK); screen.blit(l, l.get_rect(center=rect.center))
+
+        if selecting and sel_s and sel_e:
+            r1,c1=sel_s; r2,c2=sel_e; dr,dc=r2-r1,c2-c1; steps=max(abs(dr),abs(dc)); steps=1 if steps==0 else steps
+            dr=0 if dr==0 else dr//abs(dr); dc=0 if dc==0 else dc//abs(dc)
+            if (dr==0 or dc==0 or abs(dr)==abs(dc)):
+                for i in range(steps+1):
+                    h_rect = pygame.Rect(bx+(c1+dc*i)*CELL_SIZE, by+(r1+dr*i)*CELL_SIZE, CELL_SIZE, CELL_SIZE)
+                    sh = pygame.Surface((CELL_SIZE,CELL_SIZE), pygame.SRCALPHA); sh.fill(SOUP_HIGHLIGHT); screen.blit(sh, h_rect)
+
+        screen.blit(mini, (20,20))
+        draw_paper_box(screen, pygame.Rect(20+mini.get_width()+10, 30, 300, 60), font_ui.render(f"Paraules: {len(found)} / {len(targets)}", True, TEXT_COLOR))
+        
+        ly = 150; lbw = 350; lbh = 320; lbx = WIDTH - lbw - 30; lby = ly - 20
+        sl = pygame.Surface((lbw, lbh), pygame.SRCALPHA); sl.fill((255,255,255,200)); screen.blit(sl, (lbx, lby))
+        pygame.draw.rect(screen, BLACK, (lbx, lby, lbw, lbh), 4)
+        screen.blit(font_ui.render("LLISTA:", True, BLACK), (lbx+20, ly))
+        for i,w in enumerate(targets):
+            col = CHRISTMAS_GREEN if w in found else BLACK
+            screen.blit(font_ui.render(w, True, col), (lbx+20, ly+40+i*40))
+
         if won:
-            text_win = font_big.render("¡NIVELL SUPERAT!", True, (255, 215, 0))
-            text_gift = font_ui.render("JA POTS OBRIR EL REGAL", True, WHITE)
-            rect_win = text_win.get_rect(center=(WIDTH//2, HEIGHT//2 - 40))
-            rect_gift = text_gift.get_rect(center=(WIDTH//2, HEIGHT//2 + 60))
-            screen.blit(text_win, rect_win)
-            screen.blit(text_gift, rect_gift)
+             s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA); s.fill((0,0,0,180)); screen.blit(s, (0,0))
+             screen.blit(font_big.render("MOLT BÉ!!!", True, GOLD), font_big.render("MOLT BÉ!!!", True, GOLD).get_rect(center=(WIDTH//2, HEIGHT//2)))
+             sub = font_ui.render("Pots obrir el següent regal", True, WHITE); screen.blit(sub, sub.get_rect(center=(WIDTH//2, HEIGHT//2 + 100)))
+
+        pygame.display.flip(); clock.tick(FPS)
+
+# ==============================================================================
+# JUEGO 4: L'AVENTURA DELS REGALS (PLATAFORMAS MARIO STYLE)
+# ==============================================================================
+
+def run_platformer_game(character_name):
+    GRAVITY = 0.8
+    JUMP_POWER = -25
+    MOVE_SPEED = 9
+    TILE_SIZE = 80 
+    
+    def load_img(name, scale_w=None, scale_h=None):
+        if os.path.exists(name):
+            img = pygame.image.load(name).convert_alpha()
+            if scale_w and scale_h:
+                return pygame.transform.smoothscale(img, (scale_w, scale_h))
+            return img
+        else:
+            s = pygame.Surface((scale_w if scale_w else 50, scale_h if scale_h else 50))
+            s.fill((255, 0, 255))
+            return s
+
+    bg_img = load_img("fons_neu.png", WIDTH, HEIGHT)
+    block_img = load_img("bloc_terra.png", TILE_SIZE, TILE_SIZE)
+    plat_img = load_img("bloc_plataforma.png", TILE_SIZE, TILE_SIZE)
+    gift_img = load_img("regal.png", 70, 70) 
+    santa_img = load_img("papa_noel.png", 200, 200) 
+    grinch_img = load_img("grinch.png", 100, 100) 
+    player_img = load_face(character_name, 140) 
+
+    class Platform(pygame.sprite.Sprite):
+        def __init__(self, x, y, img, is_floating=False):
+            super().__init__()
+            self.image = img
+            self.rect = self.image.get_rect()
+            self.rect.x = x
+            self.rect.y = y
+            self.visual_y_offset = 0 
+            if is_floating:
+                offset = 40 
+                self.rect = pygame.Rect(x, y + offset, TILE_SIZE, TILE_SIZE - offset)
+                self.visual_y_offset = offset
+
+    class Enemy(pygame.sprite.Sprite):
+        def __init__(self, x, y, limit_left, limit_right):
+            super().__init__()
+            self.image = grinch_img
+            self.rect = self.image.get_rect()
+            self.rect.x = x
+            self.rect.bottom = y
+            self.speed = 3
+            self.limit_left = limit_left
+            self.limit_right = limit_right
+            self.vel_y = 0 
+            self.on_ground = False
+            self.jump_power = JUMP_POWER * 0.65 
+
+        def update(self, blocks):
+            self.rect.x += self.speed
+            if self.rect.right > self.limit_right or self.rect.left < self.limit_left:
+                self.speed *= -1
+                self.image = pygame.transform.flip(self.image, True, False)
+            self.vel_y += GRAVITY
+            self.rect.y += self.vel_y
+            self.on_ground = False
+            hits = pygame.sprite.spritecollide(self, blocks, False)
+            for block in hits:
+                if self.vel_y > 0:
+                    self.rect.bottom = block.rect.top
+                    self.vel_y = 0
+                    self.on_ground = True
+                elif self.vel_y < 0:
+                    self.rect.top = block.rect.bottom
+                    self.vel_y = 0
+            if self.on_ground and random.random() < 0.02: 
+                self.vel_y = self.jump_power
+
+    class Gift(pygame.sprite.Sprite):
+        def __init__(self, x, y):
+            super().__init__()
+            self.image = gift_img
+            self.rect = self.image.get_rect()
+            self.rect.x = x
+            self.rect.y = y
+
+    class Goal(pygame.sprite.Sprite):
+        def __init__(self, x, y):
+            super().__init__()
+            self.image = santa_img
+            self.rect = self.image.get_rect()
+            self.rect.x = x
+            self.rect.bottom = y
+
+    class Player(pygame.sprite.Sprite):
+        def __init__(self, x, y):
+            super().__init__()
+            self.image = player_img
+            self.rect = self.image.get_rect()
+            self.rect.inflate_ip(-20, -10) 
+            self.rect.x = x
+            self.rect.bottom = y
+            self.vel_y = 0
+            self.on_ground = False
+            self.facing_right = True
+            
+        def update(self, keys, blocks):
+            dx = 0
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                dx = -MOVE_SPEED
+                if self.facing_right:
+                    self.image = pygame.transform.flip(self.image, True, False)
+                    self.facing_right = False
+            if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                dx = MOVE_SPEED
+                if not self.facing_right:
+                    self.image = pygame.transform.flip(self.image, True, False)
+                    self.facing_right = True
+            self.rect.x += dx
+            hits = pygame.sprite.spritecollide(self, blocks, False)
+            for block in hits:
+                if dx > 0: self.rect.right = block.rect.left
+                elif dx < 0: self.rect.left = block.rect.right
+            self.vel_y += GRAVITY
+            self.rect.y += self.vel_y
+            self.on_ground = False
+            hits = pygame.sprite.spritecollide(self, blocks, False)
+            for block in hits:
+                if self.vel_y > 0:
+                    self.rect.bottom = block.rect.top
+                    self.vel_y = 0
+                    self.on_ground = True
+                elif self.vel_y < 0:
+                    self.rect.top = block.rect.bottom
+                    self.vel_y = 0
+
+        def jump(self):
+            if self.on_ground:
+                self.vel_y = JUMP_POWER
+
+    # --- DISEÑO DEL NIVEL (USER MAP) ---
+    level_map = [
+        "                                                                                                                                                                                                     ",
+        "                                                                                                                                                                                                     ",
+        "                          R                                                                                                                                                                          ",
+        "                         ###                                               R           R                         R                                                                                   ",
+        "        R                                               R                 ###         ###     G           G            G                               R                                             ",
+        "       ###          ###                                ###                           ###              #########       #####                        ##########                                        ",
+        "                                     R                              G              R                                                          R                            R                         ",
+        " P            G                   #######        G                 ###            XXXXXXXXXX         G                                                                     G                    S    ",
+        "XXXXX     XXXXXXXXXX     XXXXX               XXXXXXXXX     XXXXX        XXXXX     XXXXXXXXXX     XXXXXXXXXXX                 XXXXXXXXXX     XXXXX             G        XXXXXXXXXXXX     XXXXXXXXXXXXX",
+        "XXXXX     XXXXXXXXXX     XXXXX               XXXXXXXXX     XXXXX        XXXXX     XXXXXXXXXX     XXXXXXXXXXX     XXXXX       XXXXXXXXXX     XXXXX          XXXXXXX     XXXXXXXXXXXX     XXXXXXXXXXXXX",
+        "XXXXX     XXXXXXXXXX     XXXXX               XXXXXXXXX     XXXXX        XXXXX     XXXXXXXXXX     XXXXXXXXXXX     XXXXX       XXXXXXXXXX     XXXXX          XXXXXXX     XXXXXXXXXXXX     XXXXXXXXXXXXX",
+        "XXXXX     XXXXXXXXXX     XXXXX               XXXXXXXXX     XXXXX        XXXXX     XXXXXXXXXX     XXXXXXXXXXX     XXXXX       XXXXXXXXXX     XXXXX          XXXXXXX     XXXXXXXXXXXX     XXXXXXXXXXXXX",
+        "XXXXX     XXXXXXXXXX     XXXXX               XXXXXXXXX     XXXXX        XXXXX     XXXXXXXXXX     XXXXXXXXXXX     XXXXX       XXXXXXXXXX     XXXXX          XXXXXXX     XXXXXXXXXXXX     XXXXXXXXXXXXX",
+        "XXXXX     XXXXXXXXXX     XXXXX               XXXXXXXXX     XXXXX        XXXXX     XXXXXXXXXX     XXXXXXXXXXX     XXXXX       XXXXXXXXXX     XXXXX          XXXXXXX     XXXXXXXXXXXX     XXXXXXXXXXXXX",
+    ]
+    
+    all_sprites = pygame.sprite.Group(); blocks = pygame.sprite.Group(); enemies = pygame.sprite.Group()
+    gifts = pygame.sprite.Group(); goals = pygame.sprite.Group()
+    
+    player = None
+    level_width = len(level_map[0]) * TILE_SIZE
+    
+    # Ajuste de posición inicial del dibujado (Offset Y)
+    map_start_y = HEIGHT - (len(level_map) * TILE_SIZE) 
+    
+    for row_idx, row in enumerate(level_map):
+        for col_idx, cell in enumerate(row):
+            x = col_idx * TILE_SIZE
+            y = map_start_y + (row_idx * TILE_SIZE) 
+            
+            if cell == 'X':
+                p = Platform(x, y, block_img, is_floating=False); blocks.add(p); all_sprites.add(p)
+            elif cell == '#':
+                p = Platform(x, y, plat_img, is_floating=True); blocks.add(p); all_sprites.add(p)
+            elif cell == 'P':
+                player = Player(x, y + TILE_SIZE); all_sprites.add(player)
+            elif cell == 'G':
+                e = Enemy(x, y + TILE_SIZE, x - 200, x + 200); enemies.add(e); all_sprites.add(e)
+            elif cell == 'R':
+                g = Gift(x + 20, y + 20); gifts.add(g); all_sprites.add(g)
+            elif cell == 'S':
+                s = Goal(x, y + TILE_SIZE); goals.add(s); all_sprites.add(s)
+
+    # --- Cámara ---
+    camera_x = 0
+    camera_y = 0 
+    
+    score = 0
+    total_gifts = len(gifts)
+    game_over = False; won = False
+    
+    while True:
+        keys = pygame.key.get_pressed()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT: pygame.quit(); sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE: return
+                if event.key == pygame.K_SPACE:
+                    if not game_over and not won: player.jump()
+                    elif game_over or won: return run_platformer_game(character_name)
+
+        if not game_over and not won:
+            player.update(keys, blocks)
+            enemies.update(blocks)
+            
+            enemy_hits = pygame.sprite.spritecollide(player, enemies, False)
+            for enemy in enemy_hits:
+                if player.vel_y > 0 and player.rect.bottom < enemy.rect.centery + 40:
+                    enemy.kill(); player.vel_y = -12 
+                else: game_over = True
+            
+            if pygame.sprite.spritecollide(player, gifts, True): score += 1
+            if pygame.sprite.spritecollide(player, goals, False) and score >= total_gifts: won = True
+            if player.rect.top > HEIGHT + 1000: game_over = True
+
+            target_cam_x = player.rect.centerx - WIDTH // 2
+            target_cam_x = max(0, min(target_cam_x, level_width - WIDTH))
+            camera_x += (target_cam_x - camera_x) * 0.1
+
+        if bg_img: screen.blit(bg_img, (0, 0))
+        else: screen.fill((135, 206, 235))
+        
+        # --- DIBUJADO CORREGIDO ---
+        for sprite in all_sprites:
+            y_offset = getattr(sprite, "visual_y_offset", 0)
+            screen.blit(sprite.image, (sprite.rect.x - camera_x, sprite.rect.y - camera_y - y_offset))
+            
+        score_text = font_ui.render(f"Regals: {score} / {total_gifts}", True, BLACK)
+        draw_paper_box(screen, pygame.Rect(20, 20, 300, 60), score_text)
+        
+        if game_over:
+            s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA); s.fill((0,0,0,180)); screen.blit(s, (0,0))
+            screen.blit(font_big.render("OH NO! T'HAN ATRAPAT!", True, PAPER_COLOR), (WIDTH//2 - 300, HEIGHT//2 - 50))
+            screen.blit(font_ui.render("Espai per reiniciar", True, WHITE), (WIDTH//2 - 100, HEIGHT//2 + 50))
+        if won:
+            s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA); s.fill((0,0,0,180)); screen.blit(s, (0,0))
+            screen.blit(font_big.render("GRÀCIES PER L'AJUDA!", True, GOLD), (WIDTH//2 - 350, HEIGHT//2 - 50))
+            screen.blit(font_ui.render("Has salvat el Nadal!", True, WHITE), (WIDTH//2 - 120, HEIGHT//2 + 50))
+
+        pygame.display.flip(); clock.tick(FPS)
+
+
+# ==============================================================================
+# HUB DE JUEGOS (Menú Selección)
+# ==============================================================================
+
+def game_hub(character_name):
+    img_player = load_face(character_name, 100)
+    title_text = font_title.render("JOC DE NADAL DE FAMÍLIA", True, PAPER_COLOR)
+    
+    # 4 Botones de juego (2x2)
+    btn_w = int(WIDTH * 0.25)
+    btn_h = int(HEIGHT * 0.15)
+    
+    # Coordenadas
+    col1_x = WIDTH * 0.2
+    col2_x = WIDTH * 0.55
+    row1_y = HEIGHT * 0.35
+    row2_y = HEIGHT * 0.55
+    
+    rect_g1 = pygame.Rect(col1_x, row1_y, btn_w, btn_h) # Runner
+    rect_g2 = pygame.Rect(col2_x, row1_y, btn_w, btn_h) # Tió
+    rect_g3 = pygame.Rect(col1_x, row2_y, btn_w, btn_h) # Sopa
+    rect_g4 = pygame.Rect(col2_x, row2_y, btn_w, btn_h) # Plataformas (Nuevo)
+    
+    rect_back = pygame.Rect(WIDTH*0.4, HEIGHT*0.8, WIDTH*0.2, 60)
+
+    hub_running = True
+    while hub_running:
+        mouse_pos = pygame.mouse.get_pos()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT: return "EXIT"
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if rect_g1.collidepoint(mouse_pos): run_japan_game(character_name)
+                elif rect_g2.collidepoint(mouse_pos): run_tio_game(character_name)
+                elif rect_g3.collidepoint(mouse_pos): run_soup_game(character_name)
+                elif rect_g4.collidepoint(mouse_pos): run_platformer_game(character_name) # Nuevo
+                elif rect_back.collidepoint(mouse_pos): return "BACK" 
+
+        if os.path.exists("fondo_fuji.png"): 
+             bg = pygame.transform.smoothscale(pygame.image.load("fondo_fuji.png").convert(), (WIDTH, HEIGHT))
+             screen.blit(bg, (0,0))
+             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA); overlay.fill((0,0,0,150))
+             screen.blit(overlay, (0,0))
+        else: screen.fill((50, 20, 20))
+
+        t_rect = title_text.get_rect(center=(WIDTH//2, HEIGHT*0.15))
+        screen.blit(title_text, t_rect)
+        screen.blit(img_player, (20, 20))
+        name_txt = font_ui.render(f"Jugador: {character_name.capitalize()}", True, WHITE)
+        screen.blit(name_txt, (140, 50))
+        
+        draw_paper_box(screen, rect_g1, font_ui.render("RECORDS DE JAPÓ", True, TEXT_COLOR), None, rect_g1.collidepoint(mouse_pos))
+        draw_paper_box(screen, rect_g2, font_ui.render("EL CAGA TIÓ", True, TEXT_COLOR), None, rect_g2.collidepoint(mouse_pos))
+        draw_paper_box(screen, rect_g3, font_ui.render("SOPA DE LLETRES", True, TEXT_COLOR), None, rect_g3.collidepoint(mouse_pos))
+        draw_paper_box(screen, rect_g4, font_ui.render("AVENTURA REGALS", True, TEXT_COLOR), None, rect_g4.collidepoint(mouse_pos))
+        
+        draw_paper_box(screen, rect_back, font_ui.render("CANVIAR PERSONATGE", True, TEXT_COLOR), None, rect_back.collidepoint(mouse_pos))
 
         pygame.display.flip()
         clock.tick(FPS)
 
-# --- FLUJO PRINCIPAL DE LA APLICACIÓN ---
 
-# Este bucle controla toda la app (Menú -> Juego -> Menú)
-while True:
-    # 1. Mostrar Menú y obtener selección
-    selected_char = main_menu()
-    
-    # 2. Si es None, significa que han pulsado SALIR
-    if selected_char is None:
-        break
-    
-    # 3. Si han elegido alguien, iniciamos el juego
-    game_loop(selected_char)
+# ==============================================================================
+# SELECCIÓN DE PERSONAJE
+# ==============================================================================
 
-# Salir
-pygame.quit()
-sys.exit()
+def char_select_screen():
+    face_size = int(HEIGHT * 0.2) 
+    img_marti = load_face("marti", face_size)
+    img_marta = load_face("marta", face_size)
+    img_josepm = load_face("josepm", face_size)
+    img_esther = load_face("esther", face_size)
+    img_arnau = load_face("arnau", face_size)
+    
+    title = font_big.render("QUI ETS?", True, PAPER_COLOR)
+    
+    btn_w = int(WIDTH * 0.2)
+    btn_h = int(HEIGHT * 0.3)
+    
+    y_row1 = int(HEIGHT * 0.25)
+    y_row2 = int(HEIGHT * 0.60)
+    
+    x_r1_1 = int(WIDTH * 0.15); x_r1_2 = int(WIDTH * 0.40); x_r1_3 = int(WIDTH * 0.65)
+    x_r2_1 = int(WIDTH * 0.275); x_r2_2 = int(WIDTH * 0.525)
+    
+    rect_marti = pygame.Rect(x_r1_1, y_row1, btn_w, btn_h)
+    rect_marta = pygame.Rect(x_r1_2, y_row1, btn_w, btn_h)
+    rect_josepm = pygame.Rect(x_r1_3, y_row1, btn_w, btn_h)
+    rect_esther = pygame.Rect(x_r2_1, y_row2, btn_w, btn_h)
+    rect_arnau = pygame.Rect(x_r2_2, y_row2, btn_w, btn_h)
+    
+    rect_quit = pygame.Rect(WIDTH - 220, HEIGHT - 80, 200, 60)
+    
+    while True:
+        mouse_pos = pygame.mouse.get_pos()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT: return None
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if rect_marti.collidepoint(mouse_pos): return "marti"
+                if rect_marta.collidepoint(mouse_pos): return "marta"
+                if rect_josepm.collidepoint(mouse_pos): return "josepm"
+                if rect_esther.collidepoint(mouse_pos): return "esther"
+                if rect_arnau.collidepoint(mouse_pos): return "arnau"
+                if rect_quit.collidepoint(mouse_pos): return None
+        
+        screen.fill((30, 30, 50)) 
+        t_rect = title.get_rect(center=(WIDTH//2, HEIGHT*0.12))
+        screen.blit(title, t_rect)
+        
+        draw_paper_box(screen, rect_marti, font_ui.render("MARTÍ", True, TEXT_COLOR), img_marti, rect_marti.collidepoint(mouse_pos))
+        draw_paper_box(screen, rect_marta, font_ui.render("MARTA", True, TEXT_COLOR), img_marta, rect_marta.collidepoint(mouse_pos))
+        draw_paper_box(screen, rect_josepm, font_ui.render("JOSEP M", True, TEXT_COLOR), img_josepm, rect_josepm.collidepoint(mouse_pos))
+        draw_paper_box(screen, rect_esther, font_ui.render("ESTHER", True, TEXT_COLOR), img_esther, rect_esther.collidepoint(mouse_pos))
+        draw_paper_box(screen, rect_arnau, font_ui.render("ARNAU", True, TEXT_COLOR), img_arnau, rect_arnau.collidepoint(mouse_pos))
+        draw_paper_box(screen, rect_quit, font_ui.render("SORTIR", True, TEXT_COLOR), None, rect_quit.collidepoint(mouse_pos))
+        
+        pygame.display.flip()
+        clock.tick(FPS)
+
+# --- EJECUCIÓN PRINCIPAL ---
+if __name__ == "__main__":
+    while True:
+        player_name = char_select_screen()
+        if not player_name: break 
+        result = game_hub(player_name)
+        if result == "EXIT": break
+
+    pygame.quit()
+    sys.exit()
