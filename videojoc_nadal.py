@@ -309,8 +309,10 @@ def run_soup_game(character_name):
         if bg: screen.blit(bg, (0,0))
         else: screen.fill((200,200,200))
         
-        s_bg = pygame.Surface((BOARD_W+40, BOARD_H+40), pygame.SRCALPHA); s_bg.fill((255,255,255,200))
-        screen.blit(s_bg, (bx-20, by-20)); pygame.draw.rect(screen, BLACK, (bx-20, by-20, BOARD_W+40, BOARD_H+40), 4)
+        s_board_bg = pygame.Surface((BOARD_W + 40, BOARD_H + 40), pygame.SRCALPHA)
+        s_board_bg.fill((255, 255, 255, 200)) # Blanco semitransparente
+        screen.blit(s_board_bg, (bx - 20, by - 20))
+        pygame.draw.rect(screen, BLACK, pygame.Rect(bx - 20, by - 20, BOARD_W + 40, BOARD_H + 40), 4)
         
         for r in range(ROWS):
             for c in range(COLS):
@@ -328,7 +330,7 @@ def run_soup_game(character_name):
                     sh = pygame.Surface((CELL_SIZE,CELL_SIZE), pygame.SRCALPHA); sh.fill(SOUP_HIGHLIGHT); screen.blit(sh, h_rect)
 
         screen.blit(mini, (20,20))
-        draw_paper_box(screen, pygame.Rect(20+mini.get_width()+10, 30, 300, 60), font_ui.render(f"Paraules: {len(found)} / {len(targets)}", True, TEXT_COLOR))
+        draw_paper_box(screen, pygame.Rect(20+mini.get_width()+10, 30, 380, 60), font_ui.render(f"Paraules: {len(found)} / {len(targets)}", True, TEXT_COLOR))
         
         ly = 150; lbw = 350; lbh = 320; lbx = WIDTH - lbw - 30; lby = ly - 20
         sl = pygame.Surface((lbw, lbh), pygame.SRCALPHA); sl.fill((255,255,255,200)); screen.blit(sl, (lbx, lby))
@@ -489,7 +491,7 @@ def run_platformer_game(character_name):
         "                                                                                                                                                                                                     ",
         "                          R                                                                                                                                                                          ",
         "                         ###                                               R           R                         R                                                                                   ",
-        "        R                                               R                 ###         ###     G           G            G                               R                                             ",
+        "        R                                               R                 ###         ###     G           G            G                                R                                             ",
         "       ###          ###                                ###                           ###              #########       #####                        ##########                                        ",
         "                                     R                              G              R                                                          R                            R                         ",
         " P            G                   #######        G                 ###            XXXXXXXXXX         G                                                                     G                    S    ",
@@ -575,14 +577,28 @@ def run_platformer_game(character_name):
         score_text = font_ui.render(f"Regals: {score} / {total_gifts}", True, BLACK)
         draw_paper_box(screen, pygame.Rect(20, 20, 300, 60), score_text)
         
+        # --- TEXTO CENTRADO (FIX DEFINITIVO) ---
         if game_over:
             s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA); s.fill((0,0,0,180)); screen.blit(s, (0,0))
-            screen.blit(font_big.render("OH NO! T'HAN ATRAPAT!", True, PAPER_COLOR), (WIDTH//2 - 300, HEIGHT//2 - 50))
-            screen.blit(font_ui.render("Espai per reiniciar", True, WHITE), (WIDTH//2 - 100, HEIGHT//2 + 50))
+            
+            txt_surf = font_big.render("OH NO! T'HAN ATRAPAT!", True, PAPER_COLOR)
+            txt_rect = txt_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 50))
+            screen.blit(txt_surf, txt_rect)
+            
+            sub_surf = font_ui.render("Espai per reiniciar", True, WHITE)
+            sub_rect = sub_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 50))
+            screen.blit(sub_surf, sub_rect)
+
         if won:
             s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA); s.fill((0,0,0,180)); screen.blit(s, (0,0))
-            screen.blit(font_big.render("GRÀCIES PER L'AJUDA!", True, GOLD), (WIDTH//2 - 350, HEIGHT//2 - 50))
-            screen.blit(font_ui.render("Has salvat el Nadal!", True, WHITE), (WIDTH//2 - 120, HEIGHT//2 + 50))
+            
+            txt_surf = font_big.render("GRÀCIES PER L'AJUDA!", True, GOLD)
+            txt_rect = txt_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 50))
+            screen.blit(txt_surf, txt_rect)
+            
+            sub_surf = font_ui.render("Has salvat el Nadal!", True, WHITE)
+            sub_rect = sub_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 50))
+            screen.blit(sub_surf, sub_rect)
 
         pygame.display.flip(); clock.tick(FPS)
 
@@ -610,7 +626,7 @@ def game_hub(character_name):
     rect_g3 = pygame.Rect(col1_x, row2_y, btn_w, btn_h) # Sopa
     rect_g4 = pygame.Rect(col2_x, row2_y, btn_w, btn_h) # Plataformas (Nuevo)
     
-    rect_back = pygame.Rect(WIDTH*0.4, HEIGHT*0.8, WIDTH*0.2, 60)
+    rect_back = pygame.Rect(WIDTH*0.35, HEIGHT*0.8, WIDTH*0.3, 60)
 
     hub_running = True
     while hub_running:
