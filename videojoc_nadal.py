@@ -7,6 +7,7 @@ import string
 
 # --- CONFIGURACIÓN GLOBAL ---
 pygame.init()
+pygame.mixer.init() 
 
 # Colores Generales
 WHITE = (255, 255, 255)
@@ -16,9 +17,15 @@ TEXT_COLOR = (20, 20, 40)
 BUTTON_HOVER = (255, 250, 240)
 
 # Colores Temáticos
-CHRISTMAS_RED = (180, 30, 30) 
-CHRISTMAS_GREEN = (34, 139, 34)
-GOLD = (218, 165, 32)
+CHRISTMAS_RED = (200, 30, 30) 
+CHRISTMAS_GREEN = (34, 160, 34)
+GOLD = (230, 190, 50)
+BLUE_ICE = (100, 180, 255)
+DARK_RED = (100, 15, 15)
+DARK_GREEN = (15, 70, 15)
+DARK_GOLD = (120, 90, 10)
+DARK_BLUE = (30, 60, 100)
+
 GROUND_COLOR_JAPAN = (40, 65, 95)
 TORI_RED_FALLBACK = (200, 50, 50)
 DARUMA_RED_FALLBACK = (220, 20, 60)
@@ -330,6 +337,7 @@ def run_soup_game(character_name):
                     sh = pygame.Surface((CELL_SIZE,CELL_SIZE), pygame.SRCALPHA); sh.fill(SOUP_HIGHLIGHT); screen.blit(sh, h_rect)
 
         screen.blit(mini, (20,20))
+        # Ancho aumentado a 380
         draw_paper_box(screen, pygame.Rect(20+mini.get_width()+10, 30, 380, 60), font_ui.render(f"Paraules: {len(found)} / {len(targets)}", True, TEXT_COLOR))
         
         ly = 150; lbw = 350; lbh = 320; lbx = WIDTH - lbw - 30; lby = ly - 20
@@ -577,7 +585,7 @@ def run_platformer_game(character_name):
         score_text = font_ui.render(f"Regals: {score} / {total_gifts}", True, BLACK)
         draw_paper_box(screen, pygame.Rect(20, 20, 300, 60), score_text)
         
-        # --- TEXTO CENTRADO (FIX DEFINITIVO) ---
+        # --- TEXTO FINAL (SIN BORDE - LIMPIO) ---
         if game_over:
             s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA); s.fill((0,0,0,180)); screen.blit(s, (0,0))
             
@@ -602,29 +610,224 @@ def run_platformer_game(character_name):
 
         pygame.display.flip(); clock.tick(FPS)
 
+# ==============================================================================
+# JUEGO 5: RITME DE NADAL (Taiko Style - Custom Beat Map)
+# ==============================================================================
+
+def run_rhythm_game(character_name):
+    # --- CONFIGURACIÓN DEL MAPA DE RITMO (BEAT MAP) ---
+    BEAT_MAP = [
+        4000, 4520, 5040,
+        8100, 8620, 9140,
+        10650, 11600, 12600, 13050,
+        14100, 15100, 16100,
+        17500, 18020, 18540
+    ]
+    # ----------------------------------------------------
+    
+    bg_img = None
+    if os.path.exists("fons_musica.png"):
+        bg_img = pygame.transform.smoothscale(pygame.image.load("fons_musica.png").convert(), (WIDTH, HEIGHT))
+        
+    HIT_ZONE_COLOR = (200, 200, 200)
+    
+    song_loaded = False
+    try:
+        if os.path.exists("nadal_song.mp3"):
+            pygame.mixer.music.load("nadal_song.mp3")
+            song_loaded = True
+        elif os.path.exists("nadal_song.wav"):
+            pygame.mixer.music.load("nadal_song.wav")
+            song_loaded = True
+    except:
+        print("Error cargando música.")
+
+    # --- Elementos del Juego ---
+    NOTE_Y = int(HEIGHT * 0.5)
+    HIT_X = int(WIDTH * 0.2)
+    HIT_RADIUS = int(HEIGHT * 0.08)
+    NOTE_RADIUS = int(HEIGHT * 0.06)
+    NOTE_SPEED = int(WIDTH * 0.015) 
+    
+    SPAWN_X = WIDTH + 50
+    travel_dist = SPAWN_X - HIT_X
+    travel_time_ms = (travel_dist / NOTE_SPEED) * (1000 / FPS)
+    
+    active_notes = [] 
+    score = 0
+    combo = 0
+    max_combo = 0
+    
+    current_note_index = 0
+    start_time = 0
+    music_started = False
+    
+    feedback_text = ""
+    feedback_timer = 0
+    feedback_color = WHITE
+    hit_effect_timer = 0 
+    
+    game_finished = False
+    won = False
+    
+    note_img = load_face(character_name, NOTE_RADIUS * 2)
+    
+    running = True
+    while running:
+        current_ticks = pygame.time.get_ticks()
+        
+        if not music_started:
+            if song_loaded: pygame.mixer.music.play()
+            start_time = current_ticks
+            music_started = True
+            
+        song_time = current_ticks - start_time
+        
+        if song_time >= 18800 and not game_finished:
+            if song_loaded: pygame.mixer.music.stop()
+            game_finished = True
+            won = (score >= 1000)
+        
+        if not game_finished and current_note_index < len(BEAT_MAP):
+            next_beat_time = BEAT_MAP[current_note_index]
+            if song_time >= next_beat_time - travel_time_ms:
+                active_notes.append({'x': float(SPAWN_X), 'hit_time': next_beat_time, 'active': True})
+                current_note_index += 1
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if song_loaded: pygame.mixer.music.stop()
+                    return
+                if game_finished and not won and event.key == pygame.K_SPACE:
+                    return run_rhythm_game(character_name)
+                
+                if not game_finished and event.key == pygame.K_SPACE:
+                    hit_effect_timer = current_ticks + 100
+                    hit_made = False
+                    for note in active_notes:
+                        if note['active']:
+                            dist = abs(note['x'] - HIT_X)
+                            if dist < HIT_RADIUS * 0.5:
+                                score += 100; combo += 1
+                                feedback_text = "PERFECTE!"; feedback_color = GOLD
+                                feedback_timer = current_ticks + 500
+                                note['active'] = False; hit_made = True; break
+                            elif dist < HIT_RADIUS * 1.2:
+                                score += 50; combo += 1
+                                feedback_text = "BÉ!"; feedback_color = CHRISTMAS_GREEN
+                                feedback_timer = current_ticks + 500
+                                note['active'] = False; hit_made = True; break
+                    if not hit_made: combo = 0 
+
+        if not game_finished:
+            for note in active_notes:
+                note['x'] -= NOTE_SPEED
+                if note['x'] < HIT_X - HIT_RADIUS * 2 and note['active']:
+                    note['active'] = False
+                    combo = 0
+                    feedback_text = "MISS..."; feedback_color = (150, 150, 150)
+                    feedback_timer = current_ticks + 500
+
+            active_notes = [n for n in active_notes if n['x'] > -100]
+            if combo > max_combo: max_combo = combo
+
+        # --- DIBUJADO ---
+        if bg_img: screen.blit(bg_img, (0,0))
+        else: screen.fill((30, 30, 50))
+        
+        # Carril
+        lane_rect = pygame.Rect(0, NOTE_Y - HIT_RADIUS - 10, WIDTH, HIT_RADIUS * 2 + 20)
+        s = pygame.Surface((WIDTH, lane_rect.height), pygame.SRCALPHA)
+        s.fill((0, 0, 0, 100))
+        screen.blit(s, (0, lane_rect.y))
+        
+        # Fondo Tambor (Sin Borde)
+        s_drum = pygame.Surface((HIT_RADIUS*2, HIT_RADIUS*2), pygame.SRCALPHA)
+        pygame.draw.circle(s_drum, (0, 0, 0, 150), (HIT_RADIUS, HIT_RADIUS), HIT_RADIUS)
+        screen.blit(s_drum, (HIT_X - HIT_RADIUS, NOTE_Y - HIT_RADIUS))
+
+        # Tambor Flash (Sin Borde)
+        if current_ticks < hit_effect_timer:
+             pygame.draw.circle(screen, (255, 255, 200), (HIT_X, NOTE_Y), HIT_RADIUS)
+
+        # Notas
+        for note in active_notes:
+            if note['active']:
+                r = note_img.get_rect(center=(int(note['x']), NOTE_Y))
+                screen.blit(note_img, r)
+                pygame.draw.circle(screen, GOLD, (int(note['x']), NOTE_Y), NOTE_RADIUS, 3)
+
+        # UI: Caja de Puntuación (Estilo Papel - Unificada)
+        ui_rect = pygame.Rect(20, 20, 300, 100)
+        draw_paper_box(screen, ui_rect)
+        screen.blit(font_ui.render(f"Punts: {score}", True, TEXT_COLOR), (40, 35))
+        screen.blit(font_ui.render(f"Combo: {combo}", True, CHRISTMAS_RED), (40, 70))
+        
+        # UI: Caja de Feedback (Aparece y desaparece - Estilo Papel)
+        if current_ticks < feedback_timer:
+            fb_surf = font_ui.render(feedback_text, True, feedback_color)
+            # Caja centrada sobre el tambor
+            fb_w = fb_surf.get_width() + 40
+            fb_h = 60
+            fb_rect = pygame.Rect(0, 0, fb_w, fb_h)
+            fb_rect.center = (HIT_X, NOTE_Y - 150)
+            draw_paper_box(screen, fb_rect, fb_surf)
+
+        # Final
+        if game_finished:
+            s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA); s.fill((0,0,0,180)); screen.blit(s, (0,0))
+            if won:
+                txt_surf = font_big.render("MOLT BÉ!!!", True, GOLD)
+                txt_rect = txt_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 50))
+                screen.blit(txt_surf, txt_rect)
+                sub_surf = font_ui.render("Pots obrir el següent regal", True, WHITE)
+                sub_rect = sub_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 50))
+                screen.blit(sub_surf, sub_rect)
+            else:
+                txt_surf = font_big.render("TORNA-HO A PROVAR!", True, CHRISTMAS_RED)
+                txt_rect = txt_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 50))
+                screen.blit(txt_surf, txt_rect)
+                sub_surf = font_ui.render("Prem ESPAI per reiniciar", True, WHITE)
+                sub_rect = sub_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 50))
+                screen.blit(sub_surf, sub_rect)
+        else:
+            # Texto simple abajo (sin borde para ser sutil, o con borde fino)
+            txt_inst = font_ui.render("Prem ESPAI al ritme!", True, WHITE)
+            screen.blit(txt_inst, txt_inst.get_rect(center=(WIDTH//2, HEIGHT - 50)))
+
+        pygame.display.flip()
+        clock.tick(FPS)
+
 
 # ==============================================================================
-# HUB DE JUEGOS (Menú Selección)
+# HUB DE JUEGOS (Menú Selección - 5 JUEGOS)
 # ==============================================================================
 
 def game_hub(character_name):
     img_player = load_face(character_name, 100)
     title_text = font_title.render("JOC DE NADAL DE FAMÍLIA", True, PAPER_COLOR)
     
-    # 4 Botones de juego (2x2)
-    btn_w = int(WIDTH * 0.25)
+    # Diseño: 3 Arriba, 2 Abajo
+    btn_w = int(WIDTH * 0.22) # Un poco más estrechos para caber 3
     btn_h = int(HEIGHT * 0.15)
     
-    # Coordenadas
-    col1_x = WIDTH * 0.2
-    col2_x = WIDTH * 0.55
-    row1_y = HEIGHT * 0.35
-    row2_y = HEIGHT * 0.55
+    y1 = HEIGHT * 0.35
+    x1 = WIDTH * 0.15
+    x2 = WIDTH * 0.39
+    x3 = WIDTH * 0.63
     
-    rect_g1 = pygame.Rect(col1_x, row1_y, btn_w, btn_h) # Runner
-    rect_g2 = pygame.Rect(col2_x, row1_y, btn_w, btn_h) # Tió
-    rect_g3 = pygame.Rect(col1_x, row2_y, btn_w, btn_h) # Sopa
-    rect_g4 = pygame.Rect(col2_x, row2_y, btn_w, btn_h) # Plataformas (Nuevo)
+    y2 = HEIGHT * 0.55
+    x4 = WIDTH * 0.27
+    x5 = WIDTH * 0.51
+    
+    rect_g1 = pygame.Rect(x1, y1, btn_w, btn_h) # Runner
+    rect_g2 = pygame.Rect(x2, y1, btn_w, btn_h) # Tió
+    rect_g3 = pygame.Rect(x3, y1, btn_w, btn_h) # Sopa
+    rect_g4 = pygame.Rect(x4, y2, btn_w, btn_h) # Plataformas
+    rect_g5 = pygame.Rect(x5, y2, btn_w, btn_h) # Ritmo (Taiko)
     
     rect_back = pygame.Rect(WIDTH*0.35, HEIGHT*0.8, WIDTH*0.3, 60)
 
@@ -637,7 +840,8 @@ def game_hub(character_name):
                 if rect_g1.collidepoint(mouse_pos): run_japan_game(character_name)
                 elif rect_g2.collidepoint(mouse_pos): run_tio_game(character_name)
                 elif rect_g3.collidepoint(mouse_pos): run_soup_game(character_name)
-                elif rect_g4.collidepoint(mouse_pos): run_platformer_game(character_name) # Nuevo
+                elif rect_g4.collidepoint(mouse_pos): run_platformer_game(character_name)
+                elif rect_g5.collidepoint(mouse_pos): run_rhythm_game(character_name) # Nuevo Link
                 elif rect_back.collidepoint(mouse_pos): return "BACK" 
 
         if os.path.exists("fondo_fuji.png"): 
@@ -657,6 +861,7 @@ def game_hub(character_name):
         draw_paper_box(screen, rect_g2, font_ui.render("EL CAGA TIÓ", True, TEXT_COLOR), None, rect_g2.collidepoint(mouse_pos))
         draw_paper_box(screen, rect_g3, font_ui.render("SOPA DE LLETRES", True, TEXT_COLOR), None, rect_g3.collidepoint(mouse_pos))
         draw_paper_box(screen, rect_g4, font_ui.render("AVENTURA REGALS", True, TEXT_COLOR), None, rect_g4.collidepoint(mouse_pos))
+        draw_paper_box(screen, rect_g5, font_ui.render("RITME DE NADAL", True, TEXT_COLOR), None, rect_g5.collidepoint(mouse_pos))
         
         draw_paper_box(screen, rect_back, font_ui.render("CANVIAR PERSONATGE", True, TEXT_COLOR), None, rect_back.collidepoint(mouse_pos))
 
